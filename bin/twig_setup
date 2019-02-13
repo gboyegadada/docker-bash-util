@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+
+# Check for twig C lib
+if [ ! -f /usr/local/etc/php/conf.d/20-twig.ini ]; then
+
+cd /var/www/vendor/twig/twig/ext/twig
+phpize
+./configure
+make
+make install
+
+# Add twig
+cat <<TWIGCONF > /usr/local/etc/php/conf.d/20-twig.ini
+; Enable twig extension module
+extension=twig.so
+TWIGCONF
+
+# Go back to user home
+cd ~/
+
+/etc/init.d/apache2 reload
+
+fi

@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+
+pth="/var/www/vendor/phpunit/phpunit/phpunit"
+
+if [ -f "$pth" ]
+then
+    "${pth}" "$@"
+else
+	echo "PHPUnit not found in project. Please install using: [composer require phpunit/phpunit]"
+fi

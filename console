@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+
+dir=$(d=${0%[/\\]*}; cd "$d"; cd "../" && pwd)
+
+cd ${dir}
+
+# Read config
+source "${dir}/docker/.env"
+
+echo "Emptying Symfony cache folder..."
+# rm -fr var/cache/*
+# cp -n .env.dist .env
+
+RUNNING=$(docker inspect -f {{.State.Running}} ${container})
+
+if [ "${RUNNING}" != "true" ]; then
+    docker/run
+fi
+
+echo "Attached to running container..."
+docker exec -it ${container} bash
+

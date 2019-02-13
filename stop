@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+dir=$(d=${0%[/\\]*}; cd "$d"; cd "../" && pwd)
+
+cd ${dir}
+
+# Read config
+source "${dir}/docker/.env"
+
+echo "Stopping and removing docker containers..."
+docker kill $(docker ps -q --filter "name=${container}") 2>/dev/null
+docker rm $(docker ps -a -q --filter "name=${container}") 2>/dev/null

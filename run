@@ -1,0 +1,90 @@
+#!/usr/bin/env sh
+
+dir=$(d=${0%[/\\]*}; cd "$d"; cd "../" && pwd)
+
+cd ${dir}
+
+echo "DIR: ${0%[/\\]*}"
+
+# Read config
+source "${dir}/docker/.env"
+
+echo "-------------------- ENV ----------------------"
+echo "Docker Image: ${image}"
+echo "Docker Container: ${container}"
+echo "-----------------------------------------------"
+
+IMAGEID=$(docker images -q ${image}:latest)
+DOBUILD=false
+DIDBUILD=false
+
+for arg in "$@"
+do
+if [ "${arg}" == "-b" ]; then
+    DOBUILD=true
+fi
+done
+
+if [ $DOBUILD == true ]; then
+    echo "Remove docker containers..."
+
+    docker kill $(docker ps -aq --filter "name=${container}") 2>/dev/null
+    docker rm $(docker ps -aq --filter "name=${container}") 2>/dev/null
+
+    echo "Removing old container images..."
+
+    # Remove log files (which can weigh a ton!)
+    rm -fr var/log/*
+
+    docker rmi $(docker images -q ${image}) 2>/dev/null
+
+    echo "Please wait while I build your new docker image -- Subsequent calls will be much faster.."
+    DIDBUILD=true
+    docker build -m 3000MB --memory-swap 3000MB -t ${image}:latest .
+else
+    if [ "${IMAGEID}" == "" ]; then
+        echo "Please wait while I build your docker image -- Subsequent calls will be much faster.."
+        DIDBUILD=true
+
+        # Remove log files (which can weigh a ton!)
+        rm -fr var/log/*
+
+        docker build -m 3000MB --memory-swap 3000MB -t ${image}:latest .
+    fi
+fi
+
+echo "Emptying Symfony cache folder..."
+# rm -fr app/cache/*
+# cp -n .env.dist .env
+
+echo "Starting container..."
+
+AVAILABLE=$(docker ps -aq --filter "name=${container}")
+
+if [ -z "$AVAILABLE" ]; then
+    mkdir -p .composer
+    docker run -p ${http_port}:80 -p ${mysql_port}:3306 -h localhost -d -v ${dir}:/var/www -v ${dir}/.composer:/root/.composer --name ${container} ${image}
+    docker exec ${container} composer install --ansi  --no-progress --no-suggest --optimize-autoloader --classmap-authoritative
+    docker exec ${container} docker/bin/mysql_setup
+else
+    docker start ${container}
+    docker exec ${container} service mysql start
+    docker exec ${container} /etc/init.d/apache2 reload
+    docker exec ${container} /etc/init.d/blackfire-agent restart
+fi
+
+if [ $DIDBUILD == true ]; then
+    rm app/config/parameters.yml
+    docker exec ${container} composer install --ansi  --no-progress --no-suggest --optimize-autoloader --classmap-authoritative
+    docker exec ${container} docker/bin/twig_setup
+    docker exec ${container} npm install
+    docker exec ${container} gulp
+fi
+
+docker exec ${container} php bin/console cache:clear --env=prod
+
+IPADDRESS=$(docker inspect -f "{{ .NetworkSettings.IPAddress }}" ${container})
+HOSTPORT=$(docker inspect -f "{{(index (index .NetworkSettings.Ports \"80/tcp\") 0).HostPort}}" ${container})
+echo "Assigned IP address is: ${IPADDRESS}:${HOSTPORT} (for non windows machines only). If you are on a Windows machine navigate to: http:://localhost:${HOSTPORT}."
+
+open "http://localhost:${HOSTPORT}"

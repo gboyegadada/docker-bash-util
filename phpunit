@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+dir=$(d=${0%[/\\]*}; cd "$d"; cd "../" && pwd)
+
+cd ${dir}
+
+# Read config
+source "${dir}/docker/.env"
+
+IMAGEID=$(docker images -q ${image}:latest)
+if [ "${IMAGEID}" == "" ]; then
+    echo "Please wait while I build your docker image -- Subsequent calls will be much faster.."
+
+    # Remove log files (which can weigh a ton!)
+    rm -fr var/log/*
+
+    docker build -m 3000MB --memory-swap 3000MB -t ${image}:latest .
+fi
+
+docker run --rm -v ${dir}:/var/www ${image} phpunit "$@"
